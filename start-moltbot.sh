@@ -226,10 +226,70 @@ if (process.env.SLACK_BOT_TOKEN && process.env.SLACK_APP_TOKEN) {
 // Usage: Set AI_GATEWAY_BASE_URL or ANTHROPIC_BASE_URL to your endpoint like:
 //   https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_id}/anthropic
 //   https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_id}/openai
+//   https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_id}/compat (unified endpoint)
 const baseUrl = (process.env.AI_GATEWAY_BASE_URL || process.env.ANTHROPIC_BASE_URL || '').replace(/\/+$/, '');
-const isOpenAI = baseUrl.endsWith('/openai');
+const selectedModel = process.env.AI_GATEWAY_MODEL || '';
 
-if (isOpenAI) {
+// Detect endpoint type from URL
+const isOpenAI = baseUrl.endsWith('/openai');
+const isGoogle = baseUrl.endsWith('/google-ai-studio') || baseUrl.endsWith('/vertex-ai');
+const isMoonshot = baseUrl.endsWith('/moonshot');
+const isUnified = baseUrl.endsWith('/compat');
+
+// Model catalog for unified endpoint (provider/model format)
+const MODEL_CATALOG = {
+    // Anthropic
+    'claude-opus-4-5': { provider: 'anthropic', id: 'claude-opus-4-5-20251101', name: 'Claude Opus 4.5', context: 200000 },
+    'claude-sonnet-4-5': { provider: 'anthropic', id: 'claude-sonnet-4-5-20250929', name: 'Claude Sonnet 4.5', context: 200000 },
+    'claude-haiku-4-5': { provider: 'anthropic', id: 'claude-haiku-4-5-20251001', name: 'Claude Haiku 4.5', context: 200000 },
+    // OpenAI
+    'gpt-5.2': { provider: 'openai', id: 'gpt-5.2', name: 'GPT-5.2', context: 200000 },
+    'gpt-5': { provider: 'openai', id: 'gpt-5', name: 'GPT-5', context: 200000 },
+    'codex-mini': { provider: 'openai', id: 'codex-mini-latest', name: 'Codex Mini', context: 200000 },
+    // Google
+    'gemini-2.5-pro': { provider: 'google', id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', context: 2000000 },
+    'gemini-2.0-flash': { provider: 'google', id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', context: 1000000 },
+    'gemini-flash-lite': { provider: 'google', id: 'gemini-2.0-flash-lite', name: 'Gemini Flash Lite', context: 1000000 },
+    // Moonshot (Kimi)
+    'kimi-k2.5': { provider: 'moonshot', id: 'kimi-k2.5', name: 'Kimi K2.5', context: 128000 },
+    'kimi-k2': { provider: 'moonshot', id: 'kimi-k2', name: 'Kimi K2', context: 128000 },
+};
+
+if (isUnified) {
+    // Unified OpenAI-compatible endpoint - configure for selected model
+    // Format: https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_id}/compat
+    console.log('Configuring unified AI Gateway endpoint:', baseUrl);
+
+    const model = MODEL_CATALOG[selectedModel] || MODEL_CATALOG['claude-sonnet-4-5'];
+    console.log('Selected model:', selectedModel || 'claude-sonnet-4-5 (default)', '->', model.name);
+
+    config.models = config.models || {};
+    config.models.providers = config.models.providers || {};
+
+    // Configure as OpenAI-compatible with the unified endpoint
+    config.models.providers.unified = {
+        baseUrl: baseUrl,
+        api: 'openai-responses',
+        models: Object.entries(MODEL_CATALOG).map(([key, m]) => ({
+            id: m.provider + '/' + m.id,  // Format: provider/model-id
+            name: m.name,
+            contextWindow: m.context,
+        }))
+    };
+
+    // Add API key if set
+    if (process.env.OPENAI_API_KEY) {
+        config.models.providers.unified.apiKey = process.env.OPENAI_API_KEY;
+    }
+
+    // Set default model
+    config.agents.defaults.models = config.agents.defaults.models || {};
+    Object.entries(MODEL_CATALOG).forEach(([key, m]) => {
+        config.agents.defaults.models['unified/' + m.provider + '/' + m.id] = { alias: m.name };
+    });
+    config.agents.defaults.model.primary = 'unified/' + model.provider + '/' + model.id;
+
+} else if (isOpenAI) {
     // Create custom openai provider config with baseUrl override
     // Omit apiKey so moltbot falls back to OPENAI_API_KEY env var
     console.log('Configuring OpenAI provider with base URL:', baseUrl);
@@ -242,6 +302,7 @@ if (isOpenAI) {
             { id: 'gpt-5.2', name: 'GPT-5.2', contextWindow: 200000 },
             { id: 'gpt-5', name: 'GPT-5', contextWindow: 200000 },
             { id: 'gpt-4.5-preview', name: 'GPT-4.5 Preview', contextWindow: 128000 },
+            { id: 'codex-mini-latest', name: 'Codex Mini', contextWindow: 200000 },
         ]
     };
     // Add models to the allowlist so they appear in /models
@@ -249,7 +310,61 @@ if (isOpenAI) {
     config.agents.defaults.models['openai/gpt-5.2'] = { alias: 'GPT-5.2' };
     config.agents.defaults.models['openai/gpt-5'] = { alias: 'GPT-5' };
     config.agents.defaults.models['openai/gpt-4.5-preview'] = { alias: 'GPT-4.5' };
-    config.agents.defaults.model.primary = 'openai/gpt-5.2';
+    config.agents.defaults.models['openai/codex-mini-latest'] = { alias: 'Codex Mini' };
+
+    const defaultModel = selectedModel || 'gpt-5.2';
+    config.agents.defaults.model.primary = 'openai/' + defaultModel;
+
+} else if (isGoogle) {
+    console.log('Configuring Google provider with base URL:', baseUrl);
+    config.models = config.models || {};
+    config.models.providers = config.models.providers || {};
+    const providerConfig = {
+        baseUrl: baseUrl,
+        api: 'openai-responses',  // Vertex AI supports OpenAI-compatible API
+        models: [
+            { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', contextWindow: 2000000 },
+            { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', contextWindow: 1000000 },
+            { id: 'gemini-2.0-flash-lite', name: 'Gemini Flash Lite', contextWindow: 1000000 },
+        ]
+    };
+    if (process.env.OPENAI_API_KEY) {
+        providerConfig.apiKey = process.env.OPENAI_API_KEY;
+    }
+    config.models.providers.google = providerConfig;
+    config.agents.defaults.models = config.agents.defaults.models || {};
+    config.agents.defaults.models['google/gemini-2.5-pro'] = { alias: 'Gemini 2.5 Pro' };
+    config.agents.defaults.models['google/gemini-2.0-flash'] = { alias: 'Gemini Flash' };
+    config.agents.defaults.models['google/gemini-2.0-flash-lite'] = { alias: 'Flash Lite' };
+
+    const defaultModel = selectedModel || 'gemini-2.0-flash';
+    config.agents.defaults.model.primary = 'google/' + defaultModel;
+
+} else if (isMoonshot) {
+    console.log('Configuring Moonshot (Kimi) provider with base URL:', baseUrl);
+    config.models = config.models || {};
+    config.models.providers = config.models.providers || {};
+    const providerConfig = {
+        baseUrl: baseUrl,
+        api: 'openai-responses',  // Moonshot uses OpenAI-compatible API
+        models: [
+            { id: 'kimi-k2.5', name: 'Kimi K2.5', contextWindow: 128000 },
+            { id: 'kimi-k2', name: 'Kimi K2', contextWindow: 128000 },
+            { id: 'kimi-latest', name: 'Kimi Latest', contextWindow: 128000 },
+        ]
+    };
+    if (process.env.OPENAI_API_KEY) {
+        providerConfig.apiKey = process.env.OPENAI_API_KEY;
+    }
+    config.models.providers.moonshot = providerConfig;
+    config.agents.defaults.models = config.agents.defaults.models || {};
+    config.agents.defaults.models['moonshot/kimi-k2.5'] = { alias: 'Kimi K2.5' };
+    config.agents.defaults.models['moonshot/kimi-k2'] = { alias: 'Kimi K2' };
+    config.agents.defaults.models['moonshot/kimi-latest'] = { alias: 'Kimi Latest' };
+
+    const defaultModel = selectedModel || 'kimi-k2.5';
+    config.agents.defaults.model.primary = 'moonshot/' + defaultModel;
+
 } else if (baseUrl) {
     console.log('Configuring Anthropic provider with base URL:', baseUrl);
     config.models = config.models || {};
@@ -273,10 +388,23 @@ if (isOpenAI) {
     config.agents.defaults.models['anthropic/claude-opus-4-5-20251101'] = { alias: 'Opus 4.5' };
     config.agents.defaults.models['anthropic/claude-sonnet-4-5-20250929'] = { alias: 'Sonnet 4.5' };
     config.agents.defaults.models['anthropic/claude-haiku-4-5-20251001'] = { alias: 'Haiku 4.5' };
-    config.agents.defaults.model.primary = 'anthropic/claude-opus-4-5-20251101';
+
+    const modelMap = {
+        'claude-opus-4-5': 'claude-opus-4-5-20251101',
+        'claude-sonnet-4-5': 'claude-sonnet-4-5-20250929',
+        'claude-haiku-4-5': 'claude-haiku-4-5-20251001',
+    };
+    const defaultModel = modelMap[selectedModel] || selectedModel || 'claude-opus-4-5-20251101';
+    config.agents.defaults.model.primary = 'anthropic/' + defaultModel;
 } else {
     // Default to Anthropic without custom base URL (uses built-in pi-ai catalog)
-    config.agents.defaults.model.primary = 'anthropic/claude-opus-4-5';
+    const modelMap = {
+        'claude-opus-4-5': 'claude-opus-4-5',
+        'claude-sonnet-4-5': 'claude-sonnet-4-5',
+        'claude-haiku-4-5': 'claude-haiku-4-5',
+    };
+    const defaultModel = modelMap[selectedModel] || selectedModel || 'claude-opus-4-5';
+    config.agents.defaults.model.primary = 'anthropic/' + defaultModel;
 }
 
 // Write updated config

@@ -10,6 +10,7 @@ export interface MoltbotEnv {
   // AI Gateway configuration (preferred)
   AI_GATEWAY_API_KEY?: string; // API key for the provider configured in AI Gateway
   AI_GATEWAY_BASE_URL?: string; // AI Gateway URL (e.g., https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_id}/anthropic)
+  AI_GATEWAY_MODEL?: string; // Model to use (e.g., 'claude-sonnet-4-5', 'kimi-k2.5', 'gemini-2.0-flash')
   // Legacy direct provider configuration (fallback)
   ANTHROPIC_API_KEY?: string;
   ANTHROPIC_BASE_URL?: string;
@@ -27,6 +28,11 @@ export interface MoltbotEnv {
   DISCORD_DM_POLICY?: string;
   SLACK_BOT_TOKEN?: string;
   SLACK_APP_TOKEN?: string;
+  // WhatsApp Cloud API configuration (handled in Worker, not passed to container)
+  WHATSAPP_ACCESS_TOKEN?: string; // Permanent access token from Meta Business
+  WHATSAPP_PHONE_NUMBER_ID?: string; // Phone Number ID from WhatsApp Business
+  WHATSAPP_VERIFY_TOKEN?: string; // Webhook verification token (you make this up)
+  WHATSAPP_APP_SECRET?: string; // App Secret from Meta - used to verify webhook signatures
   // Cloudflare Access configuration for admin routes
   CF_ACCESS_TEAM_DOMAIN?: string; // e.g., 'myteam.cloudflareaccess.com'
   CF_ACCESS_AUD?: string; // Application Audience (AUD) tag
