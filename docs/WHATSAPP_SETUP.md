@@ -301,18 +301,20 @@ Look for `[WhatsApp]` log entries to debug issues.
 
 ## Quick Reference: All Secrets
 
-| Secret | Source | Example |
-|--------|--------|---------|
-| `WHATSAPP_ACCESS_TOKEN` | Meta System User → Generate Token | `EAAGm0PX4ZCps...` |
-| `WHATSAPP_PHONE_NUMBER_ID` | Meta WhatsApp API Setup → Phone Number ID | `123456789012345` |
-| `WHATSAPP_VERIFY_TOKEN` | You make this up | `my-secret-token-123` |
-| `WHATSAPP_APP_SECRET` | Meta App Settings → Basic → App Secret | `abc123def456...` |
+| Secret | Required | Source | Example |
+|--------|----------|--------|---------|
+| `WHATSAPP_ACCESS_TOKEN` | Yes | Meta System User → Generate Token | `EAAGm0PX4ZCps...` |
+| `WHATSAPP_PHONE_NUMBER_ID` | Yes | Meta WhatsApp API Setup → Phone Number ID | `123456789012345` |
+| `WHATSAPP_VERIFY_TOKEN` | Yes | You make this up | `my-secret-token-123` |
+| `WHATSAPP_APP_SECRET` | **Yes** | Meta App Settings → Basic → App Secret | `abc123def456...` |
+| `WHATSAPP_ALLOWED_NUMBERS` | No | You + partner's numbers | `+14155551234,+14155555678` |
 
 ---
 
 ## Security Checklist
 
 - [ ] Using permanent access token (not temporary 24h token)
-- [ ] `WHATSAPP_APP_SECRET` is set (enables signature verification)
+- [ ] `WHATSAPP_APP_SECRET` is set (**required** - webhook rejects unsigned requests)
+- [ ] `WHATSAPP_ALLOWED_NUMBERS` is set (recommended - restricts who can message)
 - [ ] Cloudflare Access bypass only covers `/whatsapp/webhook` path
 - [ ] Secrets set via `wrangler secret put` (not in code or env files)
