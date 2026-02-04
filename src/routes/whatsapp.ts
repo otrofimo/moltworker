@@ -112,19 +112,21 @@ whatsapp.post('/webhook', async (c) => {
   // Get raw body for signature verification
   const rawBody = await c.req.text();
 
-  // Verify webhook signature if app secret is configured
-  if (c.env.WHATSAPP_APP_SECRET) {
-    const signature = c.req.header('X-Hub-Signature-256');
-    const isValid = await verifyWebhookSignature(rawBody, signature, c.env.WHATSAPP_APP_SECRET);
-
-    if (!isValid) {
-      console.error('[WhatsApp] Webhook signature verification failed - rejecting request');
-      return c.text('Invalid signature', 401);
-    }
-    console.log('[WhatsApp] Webhook signature verified');
-  } else {
-    console.warn('[WhatsApp] WHATSAPP_APP_SECRET not set - skipping signature verification (not recommended for production)');
+  // Verify webhook signature - REQUIRED for security
+  // Without this, anyone can send fake messages pretending to be from Meta
+  if (!c.env.WHATSAPP_APP_SECRET) {
+    console.error('[WhatsApp] WHATSAPP_APP_SECRET not configured - rejecting webhook (fail-closed for security)');
+    return c.text('Webhook not configured', 503);
   }
+
+  const signature = c.req.header('X-Hub-Signature-256');
+  const isValid = await verifyWebhookSignature(rawBody, signature, c.env.WHATSAPP_APP_SECRET);
+
+  if (!isValid) {
+    console.error('[WhatsApp] Webhook signature verification failed - rejecting request');
+    return c.text('Invalid signature', 401);
+  }
+  console.log('[WhatsApp] Webhook signature verified');
 
   // Parse the verified body
   const body = JSON.parse(rawBody) as WhatsAppWebhookPayload;
