@@ -33,6 +33,7 @@ export interface MoltbotEnv {
   WHATSAPP_PHONE_NUMBER_ID?: string; // Phone Number ID from WhatsApp Business
   WHATSAPP_VERIFY_TOKEN?: string; // Webhook verification token (you make this up)
   WHATSAPP_APP_SECRET?: string; // App Secret from Meta - used to verify webhook signatures
+  WHATSAPP_ALLOWED_NUMBERS?: string; // Comma-separated allowlist of phone numbers (e.g., "+1234567890,+0987654321")
   // Cloudflare Access configuration for admin routes
   CF_ACCESS_TEAM_DOMAIN?: string; // e.g., 'myteam.cloudflareaccess.com'
   CF_ACCESS_AUD?: string; // Application Audience (AUD) tag

@@ -136,10 +136,17 @@ npx wrangler secret put WHATSAPP_PHONE_NUMBER_ID
 npx wrangler secret put WHATSAPP_VERIFY_TOKEN
 # Type something like: my-secret-verify-token-12345
 
-# App Secret from Step 1.6
+# App Secret from Step 1.6 (REQUIRED for security)
 npx wrangler secret put WHATSAPP_APP_SECRET
 # Paste the app secret and press Enter
+
+# (Optional but recommended) Allowlist of phone numbers that can message the bot
+# Comma-separated, with country code (e.g., "+1234567890,+0987654321")
+npx wrangler secret put WHATSAPP_ALLOWED_NUMBERS
+# Example: +14155551234,+14155555678
 ```
+
+> **Security Note:** `WHATSAPP_APP_SECRET` is **required**. Without it, the webhook will reject all requests. The allowlist is optional but recommended to restrict access to only you and your partner.
 
 ### Step 2.2: Deploy the Worker (Command Line)
 

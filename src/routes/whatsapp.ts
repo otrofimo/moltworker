@@ -146,9 +146,26 @@ whatsapp.post('/webhook', async (c) => {
     return c.text('OK', 200);
   }
 
+  // Filter messages by allowlist if configured
+  const allowedNumbers = parseAllowedNumbers(c.env.WHATSAPP_ALLOWED_NUMBERS);
+  const filteredMessages = allowedNumbers
+    ? messages.filter((msg) => {
+        const isAllowed = isNumberAllowed(msg.from, allowedNumbers);
+        if (!isAllowed) {
+          console.warn(`[WhatsApp] Rejected message from ${msg.from} - not in allowlist`);
+        }
+        return isAllowed;
+      })
+    : messages;
+
+  if (filteredMessages.length === 0) {
+    console.log('[WhatsApp] No messages from allowed numbers');
+    return c.text('OK', 200);
+  }
+
   // Process messages in the background
   c.executionCtx.waitUntil(
-    processMessages(c, messages).catch((err) => {
+    processMessages(c, filteredMessages).catch((err) => {
       console.error('[WhatsApp] Error processing messages:', err);
     })
   );
@@ -156,6 +173,51 @@ whatsapp.post('/webhook', async (c) => {
   // Respond immediately to Meta
   return c.text('OK', 200);
 });
+
+/**
+ * Parse the WHATSAPP_ALLOWED_NUMBERS env var into a Set of normalized numbers
+ * Returns null if not configured (allow all)
+ */
+function parseAllowedNumbers(allowedNumbers?: string): Set<string> | null {
+  if (!allowedNumbers || allowedNumbers.trim() === '') {
+    return null; // Not configured = allow all (rely on signature verification)
+  }
+
+  const numbers = new Set<string>();
+  for (const num of allowedNumbers.split(',')) {
+    const normalized = normalizePhoneNumber(num.trim());
+    if (normalized) {
+      numbers.add(normalized);
+    }
+  }
+
+  if (numbers.size === 0) {
+    console.warn('[WhatsApp] WHATSAPP_ALLOWED_NUMBERS is set but contains no valid numbers');
+    return null;
+  }
+
+  console.log(`[WhatsApp] Allowlist configured with ${numbers.size} numbers`);
+  return numbers;
+}
+
+/**
+ * Normalize a phone number for comparison
+ * WhatsApp sends numbers without '+' prefix, so we strip it for comparison
+ */
+function normalizePhoneNumber(phone: string): string {
+  // Remove all non-digit characters except leading +
+  const cleaned = phone.replace(/[^\d+]/g, '');
+  // Remove leading + if present (WhatsApp sends without it)
+  return cleaned.startsWith('+') ? cleaned.slice(1) : cleaned;
+}
+
+/**
+ * Check if a phone number is in the allowlist
+ */
+function isNumberAllowed(from: string, allowlist: Set<string>): boolean {
+  const normalized = normalizePhoneNumber(from);
+  return allowlist.has(normalized);
+}
 
 /**
  * Extract messages from the webhook payload
